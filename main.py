@@ -4,19 +4,24 @@ import curses
 from curses import wrapper
 
 
-async def blink(canvas, row, column, symbol='#'):
+async def blink(canvas, row, column, symbol='*'):
+    TIC_TIMEOUT = 0.1
     while True:
         canvas.addstr(row, column, symbol, curses.A_DIM)
-        await asyncio.sleep(0)
+        for _ in range(0, 20):
+            await asyncio.sleep(0)
 
         canvas.addstr(row, column, symbol)
-        await asyncio.sleep(0)
+        for _ in range(0, 3):
+            await asyncio.sleep(0)
 
         canvas.addstr(row, column, symbol, curses.A_BOLD)
-        await asyncio.sleep(0)
+        for _ in range(0, 5):
+            await asyncio.sleep(0)
 
         canvas.addstr(row, column, symbol)
-        await asyncio.sleep(0)
+        for _ in range(0, 3):
+            await asyncio.sleep(0)
 
 
 def draw_star(row, column, canvas):
