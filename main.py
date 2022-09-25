@@ -81,6 +81,7 @@ def draw(canvas):
     spaceship_sprite2 = load_sprite('sprites/rocket_frame_2.txt')
 
     TIC_TIMEOUT = 0.1
+    spaceship_speed = 2
 
     global SPACESHIP_ROW_POSITON
     global SPACESHIP_COL_POSITON
@@ -110,8 +111,8 @@ def draw(canvas):
             coroutines.append(animate_spaceship(canvas, [spaceship_sprite1, spaceship_sprite2]))
 
         row_direction, col_direction, space_pressed = read_controls(canvas)
-        SPACESHIP_ROW_POSITON += row_direction
-        SPACESHIP_COL_POSITON += col_direction
+        SPACESHIP_ROW_POSITON += row_direction*spaceship_speed
+        SPACESHIP_COL_POSITON += col_direction*spaceship_speed
 
         canvas.refresh()
 
