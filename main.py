@@ -7,6 +7,9 @@ from itertools import cycle
 
 from curses_tools import draw_frame, load_sprite, read_controls
 
+global SPACESHIP_ROW_POSITON
+global SPACESHIP_COL_POSITON
+
 
 async def blink(canvas, row, column, symbol='*'):
 
@@ -58,12 +61,14 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
         column += columns_speed
 
 
-async def animate_spaceship(canvas, start_row, start_column, sprites, negative=False):
+async def animate_spaceship(canvas, sprites):
+
     for sprite in cycle(sprites):
-        draw_frame(canvas, start_row, start_column, sprite, negative=negative)
-        for _ in range(2):
-            await asyncio.sleep(0)
-        draw_frame(canvas, start_row, start_column, sprite, negative=True)
+        prev_row_pos = SPACESHIP_ROW_POSITON
+        prev_col_pos = SPACESHIP_COL_POSITON
+        draw_frame(canvas, SPACESHIP_ROW_POSITON, SPACESHIP_COL_POSITON, sprite)
+        await asyncio.sleep(0)
+        draw_frame(canvas, prev_row_pos, prev_col_pos, sprite, negative=True)
 
 
 def draw(canvas):
@@ -74,7 +79,12 @@ def draw(canvas):
 
     spaceship_sprite1 = load_sprite('sprites/rocket_frame_1.txt')
     spaceship_sprite2 = load_sprite('sprites/rocket_frame_2.txt')
+
     TIC_TIMEOUT = 0.1
+
+    global SPACESHIP_ROW_POSITON
+    global SPACESHIP_COL_POSITON
+
     SPACESHIP_ROW_POSITON = max_row//2
     SPACESHIP_COL_POSITON = max_col//2
 
@@ -83,25 +93,28 @@ def draw(canvas):
     coroutines = [blink(canvas, random.randint(2, max_row-2), random.randint(2, max_col-2), symbol=random.choice(type_of_stars)) for i in range(0, 200)]
     coroutine_fire = fire(canvas, max_row//2, max_col//2)
     coroutines.append(coroutine_fire)
-    coroutines.append(animate_spaceship(canvas, SPACESHIP_ROW_POSITON, SPACESHIP_COL_POSITON, [spaceship_sprite1, spaceship_sprite2]))
-    #coroutines_spaceship = animate_spaceship(canvas, SPACESHIP_ROW_POSITON, SPACESHIP_COL_POSITON, [spaceship_sprite1, spaceship_sprite2])
+    coroutines.append(animate_spaceship(canvas, [spaceship_sprite1, spaceship_sprite2]))
 
     while True:
+
         for coroutine in coroutines.copy():
             try:
+
                 coroutine.send(None)
-                row_direction, col_direction, space_pressed = read_controls(canvas)
-                SPACESHIP_ROW_POSITON += row_direction
-                SPACESHIP_COL_POSITON += col_direction
 
             except StopIteration:
                 coroutines.remove(coroutine)
 
         if len(coroutines) == 0:
             coroutines = [blink(canvas, random.randint(2, max_row-2), random.randint(2, max_col-2), symbol=random.choice(type_of_stars)) for i in range(0, 200)]
-            coroutines.append(animate_spaceship(canvas, SPACESHIP_ROW_POSITON, SPACESHIP_COL_POSITON, [spaceship_sprite1, spaceship_sprite2]))
+            coroutines.append(animate_spaceship(canvas, [spaceship_sprite1, spaceship_sprite2]))
+
+        row_direction, col_direction, space_pressed = read_controls(canvas)
+        SPACESHIP_ROW_POSITON += row_direction
+        SPACESHIP_COL_POSITON += col_direction
 
         canvas.refresh()
+
         time.sleep(TIC_TIMEOUT)
 
 
