@@ -11,11 +11,11 @@ global SPACESHIP_ROW_POSITION
 global SPACESHIP_COL_POSITION
 
 
-async def blink(canvas, row, column, symbol='*'):
+async def blink(canvas, row, column, offset_tics, symbol='*'):
 
     while True:
         canvas.addstr(row, column, symbol, curses.A_DIM)
-        for _ in range(random.randint(1, 20)):
+        for _ in range(offset_tics):
             await asyncio.sleep(0)
 
         canvas.addstr(row, column, symbol)
@@ -101,8 +101,9 @@ def draw(canvas):
     coroutines = [
         blink(
             canvas, random.randint(2, max_row-2), random.randint(2, max_col-2),
+            random.randint(1, 20),
             symbol=random.choice(type_of_stars)
-            ) for i in range(0, 200)
+        ) for i in range(0, 200)
     ]
     coroutine_fire = fire(canvas, max_row//2, max_col//2)
     coroutines.append(coroutine_fire)
