@@ -7,8 +7,8 @@ from itertools import cycle
 
 from curses_tools import draw_frame, load_sprite, read_controls, get_frame_size
 
-global SPACESHIP_ROW_POSITION
-global SPACESHIP_COL_POSITION
+global spaceship_row_position
+global spaceship_col_position
 
 
 async def blink(canvas, row, column, offset_tics, symbol='*'):
@@ -64,16 +64,46 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
 async def animate_spaceship(canvas, sprites):
 
     for sprite in cycle(sprites):
-        prev_row_pos = SPACESHIP_ROW_POSITION
-        prev_col_pos = SPACESHIP_COL_POSITION
+        prev_row_pos = spaceship_row_position
+        prev_col_pos = spaceship_col_position
         draw_frame(
             canvas,
-            SPACESHIP_ROW_POSITION,
-            SPACESHIP_COL_POSITION,
+            spaceship_row_position,
+            spaceship_col_position,
             sprite
         )
         await asyncio.sleep(0)
         draw_frame(canvas, prev_row_pos, prev_col_pos, sprite, negative=True)
+
+
+def change_spaceship_position(row_direction, col_direction, space_pressed, spaceship_speed, max_row, max_col, sprite_row_size, sprite_col_size):
+
+    global spaceship_row_position, spaceship_col_position
+
+    spaceship_new_row_position = spaceship_row_position + row_direction * spaceship_speed
+    spaceship_new_col_position = spaceship_col_position + col_direction * spaceship_speed
+
+    if spaceship_new_row_position < 1:
+        spaceship_row_position = 1
+    else:
+        spaceship_row_position += spaceship_new_row_position
+
+    if spaceship_new_row_position \
+            > max_row - sprite_row_size - 1:
+        spaceship_row_position = max_row - sprite_row_size - 1
+    else:
+        spaceship_row_position += spaceship_new_row_position
+
+    if spaceship_new_col_position \
+            > max_col - sprite_col_size - 1:
+        spaceship_col_position = max_col - sprite_col_size - 1
+    else:
+        spaceship_col_position += col_direction * spaceship_speed
+
+    if spaceship_new_col_position < 1:
+        spaceship_col_position = 1
+    else:
+        spaceship_col_position += col_direction * spaceship_speed
 
 
 def draw(canvas):
@@ -90,11 +120,11 @@ def draw(canvas):
     TIC_TIMEOUT = 0.1
     spaceship_speed = 2
 
-    global SPACESHIP_ROW_POSITION
-    global SPACESHIP_COL_POSITION
+    global spaceship_row_position
+    global spaceship_col_position
 
-    SPACESHIP_ROW_POSITION = max_row//2
-    SPACESHIP_COL_POSITION = max_col//2
+    spaceship_row_position = max_row // 2
+    spaceship_col_position = max_col // 2
 
     type_of_stars = '+*.:`"'
 
@@ -119,37 +149,28 @@ def draw(canvas):
                 coroutine.send(None)
 
                 row_direction, col_direction, space_pressed = read_controls(canvas)
-                if SPACESHIP_ROW_POSITION+row_direction*spaceship_speed < 1:
-                    SPACESHIP_ROW_POSITION = 1
-                else:
-                    SPACESHIP_ROW_POSITION += row_direction * spaceship_speed
 
-                if SPACESHIP_ROW_POSITION + row_direction * spaceship_speed\
-                        > max_row - sprite_row_size - 1:
-                    SPACESHIP_ROW_POSITION = max_row - sprite_row_size - 1
-                else:
-                    SPACESHIP_ROW_POSITION += row_direction * spaceship_speed
-
-                if SPACESHIP_COL_POSITION+col_direction*spaceship_speed\
-                        > max_col-sprite_col_size-1:
-                    SPACESHIP_COL_POSITION = max_col - sprite_col_size - 1
-                else:
-                    SPACESHIP_COL_POSITION += col_direction * spaceship_speed
-
-                if SPACESHIP_COL_POSITION+col_direction*spaceship_speed < 1:
-                    SPACESHIP_COL_POSITION = 1
-                else:
-                    SPACESHIP_COL_POSITION += col_direction * spaceship_speed
+                change_spaceship_position(
+                    row_direction,
+                    col_direction,
+                    space_pressed,
+                    spaceship_speed,
+                    max_row,
+                    max_col,
+                    sprite_row_size,
+                    sprite_col_size
+                )
 
             except StopIteration:
                 coroutines.remove(coroutine)
 
-        if len(coroutines) == 0:
+        if not len(coroutines):
             coroutines = [
                 blink(
                     canvas,
                     random.randint(2, max_row-2),
                     random.randint(2, max_col-2),
+                    random.randint(1, 20),
                     symbol=random.choice(type_of_stars)
                 ) for i in range(0, 200)
             ]
