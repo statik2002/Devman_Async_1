@@ -7,9 +7,6 @@ from itertools import cycle
 
 from curses_tools import draw_frame, load_sprite, read_controls, get_frame_size
 
-global spaceship_row_position
-global spaceship_col_position
-
 
 async def blink(canvas, row, column, offset_tics, symbol='*'):
 
@@ -31,7 +28,8 @@ async def blink(canvas, row, column, offset_tics, symbol='*'):
             await asyncio.sleep(0)
 
 
-async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0):
+async def fire(canvas, start_row, start_column,
+               rows_speed=-0.3, columns_speed=0):
     """Display animation of gun shot, direction and speed can be specified."""
 
     row, column = start_row, start_column
@@ -61,49 +59,83 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
         column += columns_speed
 
 
-async def animate_spaceship(canvas, sprites):
+async def animate_spaceship(
+        canvas,
+        sprites,
+        row_position,
+        col_position,
+        spaceship_speed,
+        max_row,
+        max_col,
+        sprite_row_size,
+        sprite_col_size):
 
     for sprite in cycle(sprites):
-        prev_row_pos = spaceship_row_position
-        prev_col_pos = spaceship_col_position
+        prev_row_pos = row_position
+        prev_col_pos = col_position
+
         draw_frame(
             canvas,
-            spaceship_row_position,
-            spaceship_col_position,
+            row_position,
+            col_position,
             sprite
         )
+
+        old_sprite = sprite
         await asyncio.sleep(0)
-        draw_frame(canvas, prev_row_pos, prev_col_pos, sprite, negative=True)
+
+        row_direction, col_direction, space_pressed = read_controls(canvas)
+        new_row_position, new_col_position = change_spaceship_position(
+            row_position,
+            col_position,
+            row_direction,
+            col_direction,
+            space_pressed,
+            spaceship_speed,
+            max_row,
+            max_col,
+            sprite_row_size,
+            sprite_col_size
+        )
+
+        draw_frame(
+            canvas,
+            prev_row_pos,
+            prev_col_pos,
+            old_sprite,
+            negative=True
+        )
+        row_position = new_row_position
+        col_position = new_col_position
 
 
-def change_spaceship_position(row_direction, col_direction, space_pressed, spaceship_speed, max_row, max_col, sprite_row_size, sprite_col_size):
+def change_spaceship_position(row_position, col_position,
+                              row_direction, col_direction,
+                              space_pressed, spaceship_speed,
+                              max_row, max_col,
+                              sprite_row_size, sprite_col_size):
 
-    global spaceship_row_position, spaceship_col_position
-
-    spaceship_new_row_position = spaceship_row_position + row_direction * spaceship_speed
-    spaceship_new_col_position = spaceship_col_position + col_direction * spaceship_speed
+    spaceship_new_row_position = row_position + row_direction * spaceship_speed
+    spaceship_new_col_position = col_position + col_direction * spaceship_speed
 
     if spaceship_new_row_position < 1:
-        spaceship_row_position = 1
-    else:
-        spaceship_row_position += spaceship_new_row_position
+        spaceship_new_row_position = max(1, spaceship_new_row_position)
 
-    if spaceship_new_row_position \
-            > max_row - sprite_row_size - 1:
-        spaceship_row_position = max_row - sprite_row_size - 1
-    else:
-        spaceship_row_position += spaceship_new_row_position
-
-    if spaceship_new_col_position \
-            > max_col - sprite_col_size - 1:
-        spaceship_col_position = max_col - sprite_col_size - 1
-    else:
-        spaceship_col_position += col_direction * spaceship_speed
+    if spaceship_new_row_position > max_row - sprite_row_size - 1:
+        spaceship_new_row_position = min(
+            max_row - sprite_row_size - 1,
+            spaceship_new_row_position
+        )
 
     if spaceship_new_col_position < 1:
-        spaceship_col_position = 1
-    else:
-        spaceship_col_position += col_direction * spaceship_speed
+        spaceship_new_col_position = max(1, spaceship_new_col_position)
+
+    if spaceship_new_col_position > max_col - sprite_col_size - 2:
+        spaceship_new_col_position = min(
+            max_col - sprite_col_size - 2,
+            spaceship_new_col_position)
+
+    return spaceship_new_row_position, spaceship_new_col_position
 
 
 def draw(canvas):
@@ -117,11 +149,11 @@ def draw(canvas):
 
     sprite_row_size, sprite_col_size = get_frame_size(spaceship_sprite1)
 
-    TIC_TIMEOUT = 0.1
-    spaceship_speed = 2
-
-    global spaceship_row_position
-    global spaceship_col_position
+    tic_timeout = 0.1
+    spaceship_speed = 1
+    stars_offset_ticks = (1, 20)
+    star_field_width = (1, max_row-2)
+    star_field_height = (1, max_col-2)
 
     spaceship_row_position = max_row // 2
     spaceship_col_position = max_col // 2
@@ -130,60 +162,38 @@ def draw(canvas):
 
     coroutines = [
         blink(
-            canvas, random.randint(2, max_row-2), random.randint(2, max_col-2),
-            random.randint(1, 20),
+            canvas,
+            random.randint(*star_field_width),
+            random.randint(*star_field_height),
+            random.randint(*stars_offset_ticks),
             symbol=random.choice(type_of_stars)
         ) for i in range(0, 200)
     ]
-    coroutine_fire = fire(canvas, max_row//2, max_col//2)
-    coroutines.append(coroutine_fire)
+    animate_fire = fire(canvas, max_row//2, max_col//2)
+    coroutines.append(animate_fire)
     coroutines.append(
-        animate_spaceship(canvas, [spaceship_sprite1, spaceship_sprite2])
+        animate_spaceship(
+            canvas,
+            [spaceship_sprite1, spaceship_sprite2],
+            spaceship_row_position,
+            spaceship_col_position,
+            spaceship_speed,
+            max_row,
+            max_col,
+            sprite_row_size,
+            sprite_col_size
+        )
     )
 
     while True:
-
         for coroutine in coroutines.copy():
             try:
-
                 coroutine.send(None)
-
-                row_direction, col_direction, space_pressed = read_controls(canvas)
-
-                change_spaceship_position(
-                    row_direction,
-                    col_direction,
-                    space_pressed,
-                    spaceship_speed,
-                    max_row,
-                    max_col,
-                    sprite_row_size,
-                    sprite_col_size
-                )
-
             except StopIteration:
                 coroutines.remove(coroutine)
 
-        if not len(coroutines):
-            coroutines = [
-                blink(
-                    canvas,
-                    random.randint(2, max_row-2),
-                    random.randint(2, max_col-2),
-                    random.randint(1, 20),
-                    symbol=random.choice(type_of_stars)
-                ) for i in range(0, 200)
-            ]
-            coroutines.append(
-                animate_spaceship(
-                    canvas,
-                    [spaceship_sprite1, spaceship_sprite2]
-                )
-            )
-
         canvas.refresh()
-
-        time.sleep(TIC_TIMEOUT)
+        time.sleep(tic_timeout)
 
 
 if __name__ == '__main__':
