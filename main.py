@@ -71,42 +71,44 @@ async def animate_spaceship(
         sprite_col_size):
 
     for sprite in cycle(sprites):
-        prev_row_pos = row_position
-        prev_col_pos = col_position
+        for tick in range(2):
+            prev_row_pos = row_position
+            prev_col_pos = col_position
 
-        draw_frame(
-            canvas,
-            row_position,
-            col_position,
-            sprite
-        )
+            draw_frame(
+                canvas,
+                row_position,
+                col_position,
+                sprite
+            )
+            old_sprite = sprite
 
-        old_sprite = sprite
-        await asyncio.sleep(0)
+            await asyncio.sleep(0)
 
-        row_direction, col_direction, space_pressed = read_controls(canvas)
-        new_row_position, new_col_position = change_spaceship_position(
-            row_position,
-            col_position,
-            row_direction,
-            col_direction,
-            space_pressed,
-            spaceship_speed,
-            max_row,
-            max_col,
-            sprite_row_size,
-            sprite_col_size
-        )
+            row_direction, col_direction, space_pressed = read_controls(canvas)
+            new_row_position, new_col_position = change_spaceship_position(
+                row_position,
+                col_position,
+                row_direction,
+                col_direction,
+                space_pressed,
+                spaceship_speed,
+                max_row,
+                max_col,
+                sprite_row_size,
+                sprite_col_size
+            )
+            row_position = new_row_position
+            col_position = new_col_position
 
-        draw_frame(
-            canvas,
-            prev_row_pos,
-            prev_col_pos,
-            old_sprite,
-            negative=True
-        )
-        row_position = new_row_position
-        col_position = new_col_position
+            draw_frame(
+                canvas,
+                prev_row_pos,
+                prev_col_pos,
+                old_sprite,
+                negative=True
+            )
+
 
 
 def change_spaceship_position(row_position, col_position,
