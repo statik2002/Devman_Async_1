@@ -1,5 +1,5 @@
 import asyncio
-import random
+from random import randint, choice
 import time
 import curses
 from curses import wrapper
@@ -12,20 +12,32 @@ async def blink(canvas, row, column, offset_tics, symbol='*'):
 
     while True:
         canvas.addstr(row, column, symbol, curses.A_DIM)
-        for _ in range(offset_tics):
-            await asyncio.sleep(0)
+        await tick_timeout(offset_tics)
 
         canvas.addstr(row, column, symbol)
-        for _ in range(3):
-            await asyncio.sleep(0)
+        await tick_timeout(3)
 
         canvas.addstr(row, column, symbol, curses.A_BOLD)
-        for _ in range(5):
-            await asyncio.sleep(0)
+        await tick_timeout(5)
 
         canvas.addstr(row, column, symbol)
-        for _ in range(3):
-            await asyncio.sleep(0)
+        await tick_timeout(3)
+
+
+async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
+    """Animate garbage, flying from top to bottom. Сolumn position will stay same, as specified on start."""
+    rows_number, columns_number = canvas.getmaxyx()
+
+    column = max(column, 0)
+    column = min(column, columns_number - 1)
+
+    row = 0
+
+    while row < rows_number:
+        draw_frame(canvas, row, column, garbage_frame)
+        await asyncio.sleep(0)
+        draw_frame(canvas, row, column, garbage_frame, negative=True)
+        row += speed
 
 
 async def fire(canvas, start_row, start_column,
@@ -140,6 +152,22 @@ def change_spaceship_position(row_position, col_position,
     return spaceship_new_row_position, spaceship_new_col_position
 
 
+async def fill_orbit_with_garbage(trash_sprites :list, coroutines :list, canvas, star_field_width: tuple, trash_offset_tics):
+
+    while True:
+        sprite = trash_sprites[randint(0, len(trash_sprites)-1)]
+        sprite_row_size, sprite_col_size = get_frame_size(sprite)
+        sprite_position = randint(*star_field_width)
+        max_sprite_col_position = min(sprite_position, star_field_width[1]-sprite_col_size)
+        coroutines.append(fly_garbage(canvas, column=max_sprite_col_position, garbage_frame=sprite))
+        await tick_timeout(trash_offset_tics)
+
+
+async def tick_timeout(sec=1):
+    for _ in range(sec):
+        await asyncio.sleep(0)
+
+
 def draw(canvas):
     curses.curs_set(0)
     canvas.border()
@@ -149,11 +177,21 @@ def draw(canvas):
     spaceship_sprite1 = load_sprite('sprites/rocket_frame_1.txt')
     spaceship_sprite2 = load_sprite('sprites/rocket_frame_2.txt')
 
+    trash_sprites = [
+        load_sprite('sprites/duck.txt'),
+        load_sprite('sprites/hubble.txt'),
+        load_sprite('sprites/lamp.txt'),
+        load_sprite('sprites/trash_large.txt'),
+        load_sprite('sprites/trash_small.txt'),
+        load_sprite('sprites/trash_xl.txt')
+    ]
+
     sprite_row_size, sprite_col_size = get_frame_size(spaceship_sprite1)
 
     tic_timeout = 0.1
     spaceship_speed = 1
     stars_offset_ticks = (1, 20)
+    trash_offset_ticks = 10
     star_field_width = (1, max_row-2)
     star_field_height = (1, max_col-2)
 
@@ -165,14 +203,15 @@ def draw(canvas):
     coroutines = [
         blink(
             canvas,
-            random.randint(*star_field_width),
-            random.randint(*star_field_height),
-            random.randint(*stars_offset_ticks),
-            symbol=random.choice(type_of_stars)
+            randint(*star_field_width),
+            randint(*star_field_height),
+            randint(*stars_offset_ticks),
+            symbol=choice(type_of_stars)
         ) for i in range(0, 200)
     ]
     animate_fire = fire(canvas, max_row//2, max_col//2)
     coroutines.append(animate_fire)
+    coroutines.append(fill_orbit_with_garbage(trash_sprites, coroutines, canvas, star_field_height, trash_offset_ticks))
     coroutines.append(
         animate_spaceship(
             canvas,
