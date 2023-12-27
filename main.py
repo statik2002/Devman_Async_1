@@ -6,6 +6,7 @@ from curses import wrapper
 from itertools import cycle
 
 from curses_tools import draw_frame, load_sprite, read_controls, get_frame_size
+from physics import update_speed
 
 
 async def blink(canvas, row, column, offset_tics, symbol='*'):
@@ -77,6 +78,8 @@ async def animate_spaceship(
         row_position,
         col_position,
         spaceship_speed,
+        col_speed,
+        row_speed,
         max_row,
         max_col,
         sprite_row_size,
@@ -98,18 +101,22 @@ async def animate_spaceship(
             await asyncio.sleep(0)
 
             row_direction, col_direction, space_pressed = read_controls(canvas)
+            #canvas.addstr(2, 2, f'{row_direction} - {col_direction}', curses.A_DIM)
+            row_speed, col_speed = update_speed(row_speed, col_speed, row_direction, col_direction)
+            row_position += row_speed
+            col_position += col_speed
+            #canvas.addstr(3, 2, f'{row_speed} - {col_speed}', curses.A_DIM)
             new_row_position, new_col_position = change_spaceship_position(
                 row_position,
                 col_position,
-                row_direction,
-                col_direction,
                 space_pressed,
-                spaceship_speed,
                 max_row,
                 max_col,
                 sprite_row_size,
                 sprite_col_size
             )
+            #canvas.addstr(4, 2, f'{prev_row_pos} - {prev_col_pos}', curses.A_DIM)
+            #canvas.addstr(5, 2, f'{new_row_position} - {new_col_position}', curses.A_DIM)
             row_position = new_row_position
             col_position = new_col_position
 
@@ -124,32 +131,28 @@ async def animate_spaceship(
 
 
 def change_spaceship_position(row_position, col_position,
-                              row_direction, col_direction,
-                              space_pressed, spaceship_speed,
+                              space_pressed,
                               max_row, max_col,
                               sprite_row_size, sprite_col_size):
 
-    spaceship_new_row_position = row_position + row_direction * spaceship_speed
-    spaceship_new_col_position = col_position + col_direction * spaceship_speed
+    if row_position < 1:
+        row_position = max(1, row_position)
 
-    if spaceship_new_row_position < 1:
-        spaceship_new_row_position = max(1, spaceship_new_row_position)
-
-    if spaceship_new_row_position > max_row - sprite_row_size - 1:
-        spaceship_new_row_position = min(
+    if row_position > max_row - sprite_row_size - 1:
+        row_position = min(
             max_row - sprite_row_size - 1,
-            spaceship_new_row_position
+            row_position
         )
 
-    if spaceship_new_col_position < 1:
-        spaceship_new_col_position = max(1, spaceship_new_col_position)
+    if col_position < 1:
+        col_position = max(1, col_position)
 
-    if spaceship_new_col_position > max_col - sprite_col_size - 2:
-        spaceship_new_col_position = min(
+    if col_position > max_col - sprite_col_size - 2:
+        col_position = min(
             max_col - sprite_col_size - 2,
-            spaceship_new_col_position)
+            col_position)
 
-    return spaceship_new_row_position, spaceship_new_col_position
+    return row_position, col_position
 
 
 async def fill_orbit_with_garbage(trash_sprites :list, coroutines :list, canvas, star_field_width: tuple, trash_offset_tics):
@@ -190,6 +193,8 @@ def draw(canvas):
 
     tic_timeout = 0.1
     spaceship_speed = 1
+    row_speed = 0
+    col_speed = 0
     stars_offset_ticks = (1, 20)
     trash_offset_ticks = 10
     star_field_width = (1, max_row-2)
@@ -219,6 +224,8 @@ def draw(canvas):
             spaceship_row_position,
             spaceship_col_position,
             spaceship_speed,
+            row_speed,
+            col_speed,
             max_row,
             max_col,
             sprite_row_size,
