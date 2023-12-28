@@ -2,12 +2,22 @@ import asyncio
 from random import randint, choice
 import time
 import curses
+import uuid
 from curses import wrapper
 from itertools import cycle
+from explosion import explode
 
 from curses_tools import draw_frame, load_sprite, read_controls, get_frame_size
+from game_scenario import get_garbage_delay_tics
+from obstacles import Obstacle, show_obstacles
 from physics import update_speed
 
+coroutines = []
+obstacles = []
+obstacles_in_last_collisions = []
+game_over_sprite = load_sprite('sprites/game_over.txt')
+year = 1957
+game_timeout = 9999
 
 async def blink(canvas, row, column, offset_tics, symbol='*'):
 
@@ -25,20 +35,35 @@ async def blink(canvas, row, column, offset_tics, symbol='*'):
         await tick_timeout(3)
 
 
-async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
+async def fly_garbage(canvas, column, garbage_frame, obstacle_uid, speed=0.5):
     """Animate garbage, flying from top to bottom. Сolumn position will stay same, as specified on start."""
+
+    obstacle = next(obstacle for obstacle in obstacles if obstacle.uid == obstacle_uid)
+
     rows_number, columns_number = canvas.getmaxyx()
 
     column = max(column, 0)
     column = min(column, columns_number - 1)
 
-    row = 0
+    row = 1
+
+    garbage_frame_size_row, garbage_frame_size_col = get_frame_size(garbage_frame)
+
 
     while row < rows_number:
         draw_frame(canvas, row, column, garbage_frame)
+        if obstacle in obstacles_in_last_collisions:
+            obstacles_in_last_collisions.remove(obstacle)
+            draw_frame(canvas, row, column, garbage_frame, negative=True)
+            obstacles.remove(obstacle)
+            coroutines.append(explode(canvas, row + garbage_frame_size_row//2, column + garbage_frame_size_col//2))
+            return
         await asyncio.sleep(0)
         draw_frame(canvas, row, column, garbage_frame, negative=True)
         row += speed
+        obstacle.row += speed
+
+    obstacles.remove(obstacle)
 
 
 async def fire(canvas, start_row, start_column,
@@ -66,6 +91,11 @@ async def fire(canvas, start_row, start_column,
 
     while 0 < row < max_row and 0 < column < max_column:
         canvas.addstr(round(row), round(column), symbol)
+        for obstacle in obstacles:
+            if obstacle.has_collision(row, column, 1, 1):
+                canvas.addstr(round(row), round(column), ' ')
+                obstacles_in_last_collisions.append(obstacle)
+                return
         await asyncio.sleep(0)
         canvas.addstr(round(row), round(column), ' ')
         row += rows_speed
@@ -98,13 +128,24 @@ async def animate_spaceship(
             )
             old_sprite = sprite
 
+            for obstacle in obstacles:
+                if obstacle.has_collision(row_position, col_position, sprite_row_size, sprite_col_size):
+                    draw_frame(canvas, row_position, col_position, sprite, negative=True)
+                    #obstacles_in_last_collisions.append(obstacle)
+                    coroutines.append(show_gameover(canvas))
+                    return
+
             await asyncio.sleep(0)
 
             row_direction, col_direction, space_pressed = read_controls(canvas)
-            #canvas.addstr(2, 2, f'{row_direction} - {col_direction}', curses.A_DIM)
+
+            canvas.addstr(2, 2, f'obstacles={len(obstacles)}', curses.A_DIM)
+            canvas.addstr(3, 2, f'hit_obstacles={len(obstacles_in_last_collisions)}', curses.A_DIM)
             row_speed, col_speed = update_speed(row_speed, col_speed, row_direction, col_direction)
             row_position += row_speed
             col_position += col_speed
+            if space_pressed:
+                coroutines.append(fire(canvas, row_position, col_position, rows_speed=-1))
             #canvas.addstr(3, 2, f'{row_speed} - {col_speed}', curses.A_DIM)
             new_row_position, new_col_position = change_spaceship_position(
                 row_position,
@@ -155,15 +196,19 @@ def change_spaceship_position(row_position, col_position,
     return row_position, col_position
 
 
-async def fill_orbit_with_garbage(trash_sprites :list, coroutines :list, canvas, star_field_width: tuple, trash_offset_tics):
-
+async def fill_orbit_with_garbage(trash_sprites :list, canvas, star_field_width: tuple, trash_offset_tics):
+    global game_timeout
     while True:
         sprite = trash_sprites[randint(0, len(trash_sprites)-1)]
         sprite_row_size, sprite_col_size = get_frame_size(sprite)
         sprite_position = randint(*star_field_width)
         max_sprite_col_position = min(sprite_position, star_field_width[1]-sprite_col_size)
-        coroutines.append(fly_garbage(canvas, column=max_sprite_col_position, garbage_frame=sprite))
-        await tick_timeout(trash_offset_tics)
+        obstacle = Obstacle(1, max_sprite_col_position, sprite_row_size, sprite_col_size, uid=uuid.uuid4())
+        obstacles.append(obstacle)
+        coroutines.append(fly_garbage(canvas, column=max_sprite_col_position, garbage_frame=sprite, obstacle_uid = obstacle.uid))
+        #coroutines.append(show_obstacles(canvas, obstacles))
+        canvas.addstr(1, 100, f'{game_timeout}', curses.A_DIM)
+        await tick_timeout(game_timeout)
 
 
 async def tick_timeout(sec=1):
@@ -171,11 +216,38 @@ async def tick_timeout(sec=1):
         await asyncio.sleep(0)
 
 
+async def show_gameover(canvas):
+
+    max_row, max_col = canvas.getmaxyx()
+    sprite_row_size, sprite_col_size = get_frame_size(game_over_sprite)
+
+    while True:
+        draw_frame(canvas, max_row//2-sprite_row_size//2, max_col//2-sprite_col_size//2, game_over_sprite)
+        await asyncio.sleep(0)
+
+
+async def game_scenario(speed, canvas):
+    global year, game_timeout
+    max_row, max_col = canvas.getmaxyx()
+    #sub_window = curses.window.derwin(canvas, max_row - 2, 1)
+    while True:
+        timeout = get_garbage_delay_tics(year)
+        game_timeout = timeout if timeout else 9999
+        canvas.addstr(max_row-1, 10, f'{year}', curses.A_DIM)
+        canvas.addstr(max_row - 1, 20, f'{game_timeout}', curses.A_DIM)
+        await tick_timeout(10)
+        year = year + 1
+
+
+
 def draw(canvas):
     curses.curs_set(0)
     canvas.border()
     canvas.nodelay(True)
     max_row, max_col = canvas.getmaxyx()
+    #sub_window = curses.window.derwin(canvas, max_row-2, 1)
+
+
 
     spaceship_sprite1 = load_sprite('sprites/rocket_frame_1.txt')
     spaceship_sprite2 = load_sprite('sprites/rocket_frame_2.txt')
@@ -191,7 +263,8 @@ def draw(canvas):
 
     sprite_row_size, sprite_col_size = get_frame_size(spaceship_sprite1)
 
-    tic_timeout = 0.1
+    tic_timeout = 0.15
+    game_speed = 2
     spaceship_speed = 1
     row_speed = 0
     col_speed = 0
@@ -205,18 +278,15 @@ def draw(canvas):
 
     type_of_stars = '+*.:`"'
 
-    coroutines = [
-        blink(
+    #coroutines.append(game_scenario(game_speed, canvas))
+    coroutines.append(blink(
             canvas,
             randint(*star_field_width),
             randint(*star_field_height),
             randint(*stars_offset_ticks),
             symbol=choice(type_of_stars)
-        ) for i in range(0, 200)
-    ]
-    animate_fire = fire(canvas, max_row//2, max_col//2)
-    coroutines.append(animate_fire)
-    coroutines.append(fill_orbit_with_garbage(trash_sprites, coroutines, canvas, star_field_height, trash_offset_ticks))
+        ) for i in range(0, 200))
+    coroutines.append(fill_orbit_with_garbage(trash_sprites, canvas, star_field_height, trash_offset_ticks))
     coroutines.append(
         animate_spaceship(
             canvas,
@@ -232,6 +302,9 @@ def draw(canvas):
             sprite_col_size
         )
     )
+
+
+
 
     while True:
         for coroutine in coroutines.copy():
