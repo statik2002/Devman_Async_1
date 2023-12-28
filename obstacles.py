@@ -23,7 +23,8 @@ class Obstacle:
         row, column = self.get_bounding_box_corner_pos()
         return row, column, self.get_bounding_box_frame()
 
-    def has_collision(self, obj_corner_row, obj_corner_column, obj_size_rows=1, obj_size_columns=1):
+    def has_collision(self, obj_corner_row, obj_corner_column,
+                      obj_size_rows=1, obj_size_columns=1):
         '''Determine if collision has occured. Return True or False.'''
         return has_collision(
             (self.row, self.column),
@@ -58,7 +59,8 @@ async def show_obstacles(canvas, obstacles):
             draw_frame(canvas, row, column, frame, negative=True)
 
 
-def _is_point_inside(corner_row, corner_column, size_rows, size_columns, point_row, point_row_column):
+def _is_point_inside(corner_row, corner_column, size_rows,
+                     size_columns, point_row, point_row_column):
     rows_flag = corner_row <= point_row < corner_row + size_rows
     columns_flag = corner_column <= point_row_column < corner_column + size_columns
 
@@ -80,7 +82,8 @@ def has_collision(obstacle_corner, obstacle_size, obj_corner, obj_size=(1, 1)):
 
     return any([
         _is_point_inside(*obstacle_corner, *obstacle_size, *obj_corner),
-        _is_point_inside(*obstacle_corner, *obstacle_size, *opposite_obj_corner),
+        _is_point_inside(*obstacle_corner,
+                         *obstacle_size, *opposite_obj_corner),
 
         _is_point_inside(*obj_corner, *obj_size, *obstacle_corner),
         _is_point_inside(*obj_corner, *obj_size, *opposite_obstacle_corner),
