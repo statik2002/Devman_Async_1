@@ -1,4 +1,5 @@
 import asyncio
+import os
 from random import randint, choice
 import time
 import curses
@@ -9,7 +10,7 @@ from explosion import explode
 
 from curses_tools import draw_frame, load_sprite, read_controls, get_frame_size
 from game_scenario import get_garbage_delay_tics, PHRASES
-from obstacles import Obstacle
+from obstacles import Obstacle, show_obstacles
 from physics import update_speed
 
 coroutines = []
@@ -17,6 +18,8 @@ obstacles = []
 obstacles_in_last_collisions = []
 game_over_sprite = load_sprite('sprites/game_over.txt')
 year = 1957
+trash_offset_ticks = 10
+trash_is_present=False
 
 
 async def blink(canvas, row, column, offset_tics, symbol='*'):
@@ -35,12 +38,9 @@ async def blink(canvas, row, column, offset_tics, symbol='*'):
         await tick_timeout(3)
 
 
-async def fly_garbage(canvas, column, garbage_frame, obstacle_uid, speed=0.5):
+async def fly_garbage(canvas, column, garbage_frame, speed=0.5):
     """Animate garbage, flying from top to bottom.
     Сolumn position will stay same, as specified on start."""
-
-    obstacle = next(obstacle for obstacle in obstacles
-                    if obstacle.uid == obstacle_uid)
 
     rows_number, columns_number = canvas.getmaxyx()
 
@@ -50,6 +50,15 @@ async def fly_garbage(canvas, column, garbage_frame, obstacle_uid, speed=0.5):
     row = 1
 
     garbage_frame_size_row, garbage_frame_size_col = get_frame_size(garbage_frame)
+
+    obstacle = Obstacle(
+        1,
+        column,
+        garbage_frame_size_row,
+        garbage_frame_size_col,
+        uid=uuid.uuid4()
+    )
+    obstacles.append(obstacle)
 
     while row < rows_number:
         draw_frame(canvas, row, column, garbage_frame)
@@ -64,6 +73,7 @@ async def fly_garbage(canvas, column, garbage_frame, obstacle_uid, speed=0.5):
             ))
             return
         await asyncio.sleep(0)
+
         draw_frame(canvas, row, column, garbage_frame, negative=True)
         row += speed
         obstacle.row += speed
@@ -205,7 +215,31 @@ def change_spaceship_position(row_position, col_position,
 
 async def fill_orbit_with_garbage(trash_sprites: list, canvas,
                                   star_field_width: tuple, trash_offset_tics):
-    global year
+    global trash_is_present, trash_offset_ticks
+
+    while True:
+
+        if trash_is_present:
+            sprite = trash_sprites[randint(0, len(trash_sprites) - 1)]
+            sprite_row_size, sprite_col_size = get_frame_size(sprite)
+            sprite_position = randint(*star_field_width)
+            max_sprite_col_position = min(
+                sprite_position,
+                star_field_width[1] - sprite_col_size
+            )
+
+            coroutines.append(fly_garbage(
+                canvas,
+                column=max_sprite_col_position,
+                garbage_frame=sprite,
+                )
+            )
+
+        await tick_timeout(trash_offset_tics)
+
+
+async def scenario(canvas):
+    global year, trash_offset_ticks, trash_is_present
     phrase = PHRASES[year]
 
     while True:
@@ -215,29 +249,9 @@ async def fill_orbit_with_garbage(trash_sprites: list, canvas,
         if timeout:
             phrase = PHRASES.get(year) if PHRASES.get(year) else phrase
             trash_offset_tics = timeout
-            sprite = trash_sprites[randint(0, len(trash_sprites) - 1)]
-            sprite_row_size, sprite_col_size = get_frame_size(sprite)
-            sprite_position = randint(*star_field_width)
-            max_sprite_col_position = min(
-                sprite_position,
-                star_field_width[1] - sprite_col_size
-            )
-            obstacle = Obstacle(
-                1,
-                max_sprite_col_position,
-                sprite_row_size,
-                sprite_col_size,
-                uid=uuid.uuid4()
-            )
-            obstacles.append(obstacle)
-            coroutines.append(fly_garbage(
-                canvas,
-                column=max_sprite_col_position,
-                garbage_frame=sprite,
-                obstacle_uid=obstacle.uid)
-            )
+            trash_is_present = True
 
-        await tick_timeout(trash_offset_tics)
+        await tick_timeout(10)
         year += 1
 
 
@@ -265,14 +279,10 @@ def draw(canvas):
     spaceship_sprite1 = load_sprite('sprites/rocket_frame_1.txt')
     spaceship_sprite2 = load_sprite('sprites/rocket_frame_2.txt')
 
-    trash_sprites = [
-        load_sprite('sprites/duck.txt'),
-        load_sprite('sprites/hubble.txt'),
-        load_sprite('sprites/lamp.txt'),
-        load_sprite('sprites/trash_large.txt'),
-        load_sprite('sprites/trash_small.txt'),
-        load_sprite('sprites/trash_xl.txt')
-    ]
+    trash_sprites = []
+    trash_sprites_path = 'sprites/trash_sprites'
+    for root, dirs, files in os.walk('sprites/trash_sprites', topdown=False):
+        trash_sprites = [load_sprite(os.path.join(trash_sprites_path, filename)) for filename in files]
 
     sprite_row_size, sprite_col_size = get_frame_size(spaceship_sprite1)
 
@@ -280,7 +290,6 @@ def draw(canvas):
     row_speed = 0
     col_speed = 0
     stars_offset_ticks = (1, 20)
-    trash_offset_ticks = 10
     star_field_width = (1, max_row-2)
     star_field_height = (1, max_col-2)
 
@@ -289,6 +298,7 @@ def draw(canvas):
 
     type_of_stars = '+*.:`"'
 
+    coroutines.append(scenario(canvas))
     coroutines.append(blink(
             canvas,
             randint(*star_field_width),
